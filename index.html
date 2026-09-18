@@ -8,19 +8,19 @@
   :root{
     --bg:#faf7f2; --card:#ffffff; --ink:#2b2b2b; --muted:#7a7268;
     --accent:#8a5a2b; --accent-soft:#f3e7d6; --hi:#ffe08a; --line:#e7ddcf;
-    --topic:#5a7d3a; --topic-soft:#e8f0dc;
+    --topic:#5a7d3a; --topic-soft:#e8f0dc; --flash:#fff2c4;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
       --bg:#1b1815; --card:#26221e; --ink:#ece5da; --muted:#a89e90;
       --accent:#e0a86a; --accent-soft:#3a3128; --hi:#8a6d1f; --line:#3a332b;
-      --topic:#a9c882; --topic-soft:#2e3826;
+      --topic:#a9c882; --topic-soft:#2e3826; --flash:#5c4a1e;
     }
   }
   :root[data-theme="dark"]{
     --bg:#1b1815; --card:#26221e; --ink:#ece5da; --muted:#a89e90;
     --accent:#e0a86a; --accent-soft:#3a3128; --hi:#8a6d1f; --line:#3a332b;
-    --topic:#a9c882; --topic-soft:#2e3826;
+    --topic:#a9c882; --topic-soft:#2e3826; --flash:#5c4a1e;
   }
   *{box-sizing:border-box}
   body{
@@ -57,8 +57,10 @@
 
   .tip{
     background:var(--card); border:1px solid var(--line); border-radius:12px;
-    padding:12px 14px; margin:10px 0;
+    padding:12px 14px; margin:10px 0; cursor:pointer;
+    transition:border-color .15s;
   }
+  .tip:active{border-color:var(--accent)}
   .tip .meta{font-size:.72rem; color:var(--topic); background:var(--topic-soft);
     display:inline-block; padding:1px 9px; border-radius:20px; margin-bottom:6px;}
   .tip .num{
@@ -67,9 +69,9 @@
     margin-bottom:6px; margin-left:6px;
   }
   .tip .body{font-size:1.02rem}
+  .tip .goto{font-size:.68rem; color:var(--muted); margin-top:6px}
   mark{background:var(--hi); color:inherit; border-radius:3px; padding:0 1px}
 
-  /* View All accordion */
   .topic{border:1px solid var(--line); border-radius:12px; margin:10px 0; overflow:hidden; background:var(--card)}
   .topic-head{
     display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer;
@@ -82,9 +84,11 @@
   .topic.open .arrow{transform:rotate(90deg)}
   .topic-body{display:none; padding:4px 14px 10px}
   .topic.open .topic-body{display:block}
-  .topic-body .row{padding:8px 0; border-top:1px dashed var(--line); font-size:1rem}
+  .topic-body .row{padding:8px 0; border-top:1px dashed var(--line); font-size:1rem; border-radius:6px}
   .topic-body .row:first-child{border-top:none}
   .topic-body .row .tipno{font-size:.7rem; color:var(--accent); font-weight:700; margin-right:6px}
+  .topic-body .row.flash{animation:flash 2s ease}
+  @keyframes flash{0%,40%{background:var(--flash)}100%{background:transparent}}
 
   .empty{text-align:center; color:var(--muted); padding:40px 20px}
   .hint{font-size:.9rem; color:var(--muted); text-align:center; padding:26px 16px}
@@ -107,16 +111,15 @@
   </div>
 </header>
 <main id="results"><div class="loading">ஏற்றுகிறது…</div></main>
-<footer>உள்ளூர் தேடல் · இணைய இணைப்பு தேவையில்லை<br>
+<footer>சித்த மருத்துவ குறிப்புகள்<br>
 <span style="opacity:.8">இது பாரம்பரிய தகவல் மட்டுமே. தீவிர பிரச்சனைகளுக்கு மருத்துவரை அணுகவும்.</span></footer>
 
 <script>
-let TIPS=[];   // {n, t, topicNo, topicName}
-let TOPICS=[]; // {no, name, tips:[...]}
+let TIPS=[];
+let TOPICS=[];
 let NORM=[];
 let mode='search';
 
-/* Tamil normalization: ignore spaces, treat confusable letters as same */
 function normalize(s){
   if(!s) return "";
   try{ s=s.normalize("NFC"); }catch(e){}
@@ -156,7 +159,6 @@ const results=document.getElementById("results");
 const countEl=document.getElementById("count");
 const viewAllBtn=document.getElementById("viewAll");
 
-/* Load and parse sidha_tips.txt */
 fetch('sidha_tips.txt')
   .then(r=>{ if(!r.ok) throw new Error('load'); return r.text(); })
   .then(txt=>{ parseData(txt); NORM=TIPS.map(t=>normalize(t.t)); search(); })
@@ -164,33 +166,35 @@ fetch('sidha_tips.txt')
 
 function parseData(txt){
   const lines=txt.split(/\r?\n/);
-  let curTopicNo="", curTopicName="", curTopic=null;
+  let curNo="", curName="", curTopic=null, tIndex=-1;
   for(const raw of lines){
     const line=raw.trim();
     if(!line) continue;
     let m;
     if((m=line.match(/^top_(\S+)\s+([\s\S]*)$/))){
-      curTopicNo=m[1]; curTopicName=m[2].trim();
-      curTopic={no:curTopicNo,name:curTopicName,tips:[]};
+      curNo=m[1]; curName=m[2].trim();
+      tIndex=TOPICS.length;
+      curTopic={no:curNo,name:curName,tips:[],idx:tIndex};
       TOPICS.push(curTopic);
     } else if((m=line.match(/^tip_(\d+)\s+([\s\S]*)$/))){
-      const tip={n:parseInt(m[1]),t:m[2].trim(),topicNo:curTopicNo,topicName:curTopicName};
+      const tip={n:parseInt(m[1]),t:m[2].trim(),topicNo:curNo,topicName:curName,topicIdx:tIndex};
       TIPS.push(tip);
       if(curTopic) curTopic.tips.push(tip);
     }
   }
 }
 
-/* SEARCH mode */
+/* SEARCH */
 function renderSearch(list, qn){
   if(list.length===0){ results.innerHTML='<div class="empty">பொருத்தமான குறிப்பு இல்லை.<br>வேறு வார்த்தையை முயற்சிக்கவும்.</div>'; return; }
   const frag=[];
   for(const t of list){
     frag.push(
-      '<div class="tip">'+
+      '<div class="tip" onclick="jumpTo('+t.topicIdx+','+t.n+')">'+
         '<span class="meta">தலைப்பு '+escapeHtml(t.topicNo)+' · '+escapeHtml(t.topicName)+'</span>'+
         '<span class="num">குறிப்பு '+t.n+'</span>'+
         '<div class="body">'+highlight(t.t,qn)+'</div>'+
+        '<div class="goto">தலைப்பில் காண தட்டவும் →</div>'+
       '</div>'
     );
   }
@@ -215,18 +219,19 @@ function search(){
   renderSearch(matched,qn);
 }
 
-/* VIEW ALL mode */
-function renderViewAll(){
+/* VIEW ALL */
+function renderViewAll(openIdx){
   mode='viewall';
   viewAllBtn.classList.add('active');
   countEl.textContent=TOPICS.length+" தலைப்புகள்";
   const frag=[];
   for(const tp of TOPICS){
+    const openClass = (openIdx===tp.idx) ? ' open' : '';
     const rows=tp.tips.map(t=>
-      '<div class="row"><span class="tipno">'+t.n+'.</span>'+escapeHtml(t.t)+'</div>'
+      '<div class="row" id="tiprow_'+t.n+'"><span class="tipno">'+t.n+'.</span>'+escapeHtml(t.t)+'</div>'
     ).join("");
     frag.push(
-      '<div class="topic">'+
+      '<div class="topic'+openClass+'" id="topic_'+tp.idx+'">'+
         '<div class="topic-head" onclick="this.parentNode.classList.toggle(\'open\')">'+
           '<span class="tno">தலைப்பு '+escapeHtml(tp.no)+'</span>'+
           '<span class="tname">'+escapeHtml(tp.name)+'</span>'+
@@ -239,10 +244,26 @@ function renderViewAll(){
   results.innerHTML=frag.join("");
 }
 
+/* Jump from a search result to the tip inside View All */
+function jumpTo(topicIdx, tipN){
+  renderViewAll(topicIdx);
+  // scroll & flash after render
+  requestAnimationFrame(()=>{
+    const row=document.getElementById('tiprow_'+tipN);
+    if(row){
+      row.scrollIntoView({behavior:'smooth', block:'center'});
+      row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash');
+    } else {
+      const tp=document.getElementById('topic_'+topicIdx);
+      if(tp) tp.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+  });
+}
+
 let timer=null;
 q.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(search,90);});
 clearBtn.addEventListener("click",()=>{q.value="";q.focus();search();});
-viewAllBtn.addEventListener("click",()=>{ if(mode==='viewall'){ search(); } else { q.value=""; clearBtn.style.display="none"; renderViewAll(); } });
+viewAllBtn.addEventListener("click",()=>{ if(mode==='viewall'){ search(); } else { q.value=""; clearBtn.style.display="none"; renderViewAll(-1); } });
 </script>
 </body>
 </html>
